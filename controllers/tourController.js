@@ -1,3 +1,4 @@
+const { deleteMany } = require('../models/tourModel');
 const Tour = require('../models/tourModel');
 //Route handlers, aka controllers
 
@@ -11,16 +12,32 @@ const tours = JSON.parse(
 //get all tours
 exports.getAllTours = async (req, res) => {
   try {
+    //filtering out things like the page for pagination
+    //new object containing all teh key value pairs in the req.query object
+    // eslint-disable-next-line node/no-unsupported-features/es-syntax
+    const queryObject = { ...req.query };
+    const excludedFields = ['page', 'sort', 'limit', 'fields'];
+    excludedFields.forEach((el) => delete queryObject[el]);
+    /*gives us:
+    //{ duration: '5',
+  difficulty: 'easy',
+  page: '2',
+  sort: '1',
+  limit: '10' } { duration: '5', difficulty: 'easy' }
+  */
+
     //query is 127.0.0.1:3000/api/v1/tours?duration=5&difficulty=easy
-    console.log(req.query);
+
     //from mongoDB, the find method returns all documents in teh collection
 
+    const allTours = await Tour.find(queryObject);
     //new way, mongoose has specific filter methods we can use
-    const allTours = await Tour.find()
-      .where('duration')
-      .equals(5)
-      .where('difficulty')
-      .equals('easy');
+    //query prototype has a ton of methods on the query class, so we can chain
+    //when we use await, then the query executed and comes back with the result of the query
+    //.where('duration')
+    //.equals(5)
+    //.where('difficulty')
+    //.equals('easy');
     //could use the normal filter object from mongo
     // await Tour.find({ duration: 5, difficulty: 'easy'})
 
