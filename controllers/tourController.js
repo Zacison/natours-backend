@@ -9,20 +9,61 @@ const tours = JSON.parse(
 
 //first get request
 //get all tours
-exports.getAllTours = (req, res) => {
-  res.status(200);
-  res.json({
-    status: 'success',
+exports.getAllTours = async (req, res) => {
+  try {
+    //query is 127.0.0.1:3000/api/v1/tours?duration=5&difficulty=easy
+    console.log(req.query);
+    //from mongoDB, the find method returns all documents in teh collection
 
-    data: {},
-  });
+    //new way, mongoose has specific filter methods we can use
+    const allTours = await Tour.find()
+      .where('duration')
+      .equals(5)
+      .where('difficulty')
+      .equals('easy');
+    //could use the normal filter object from mongo
+    // await Tour.find({ duration: 5, difficulty: 'easy'})
+
+    //another way is await Tour.find(req.query)
+    res.status(200);
+    res.json({
+      status: 'success',
+      results: allTours.length,
+      data: {
+        tours: allTours,
+      },
+    });
+  } catch (error) {
+    res.status(404).json({
+      status: 'fail',
+      message: error,
+    });
+  }
 };
 
-exports.getOneTour = (req, res) => {
+exports.getOneTour = async (req, res) => {
+  try {
+    //findbyID is a helper function for finding one tour
+    //like the filter object in mongodb
+    //Tour.findOne({ _id: req.params.id })
+    //findBy ID
+    const tour = await Tour.findById(req.params.id);
+    res.status(200).json({
+      status: 'success',
+      data: {
+        tour: tour,
+      },
+    });
+  } catch (error) {
+    res.status(404).json({
+      status: 'fail',
+      message: error,
+    });
+  }
   //consolse: {id: '5'}
   //req.params auto assigns the value to the parameter we defined
   //console.log(req.params);
-
+  /*
   //convert the ID string to a number
   const reqParamId = req.params.id * 1;
 
@@ -36,6 +77,7 @@ exports.getOneTour = (req, res) => {
     status: 'success',
     data: {},
   });
+  */
 };
 
 //mw for the post
@@ -55,32 +97,76 @@ exports.checkBody = (req, res, next) => {
 };
 */
 
-exports.createTour = (req, res) => {
-  //request object holds all the data about the request
-  //out of the box express doesnt give us access to that
-  //we need to include middleware for this
-  //req.body is available bc of the middleware
-  //console.log(req.body);
-  //have to send something back to finish req/res cycle
-  //new object usually gets an id
+exports.createTour = async (req, res) => {
+  //we need to error handle, and we use a try/catch block with async code
+  try {
+    //old version - had the tour we created,
+    //Then the document has the save method and lots of others
+    //const newTour = new Tour({});
+    //newTour.save()
+
+    //we call the create method right on the model itself
+    //Tour.create(data) returns a promise, but we can use async await
+    //and store the result into a var, which will be the
+    //newly created document with the ID and everything
+    //we pass in req.body because it is the data that comes in from the req
+    const newTour = await Tour.create(req.body);
+
+    //we tried to post a duration and difficulty, but it didnt work
+    //Bc it's not in the schema
+    res.status(201).json({
+      status: 'success',
+      data: {
+        tour: newTour,
+      },
+    });
+  } catch (error) {
+    //if theres an error, send back a response saying so
+    res.status(400).json({
+      status: 'fail',
+      message: error,
+    });
+  }
 };
 
-exports.updateTour = (req, res) => {
-  //update still sends back 200 ok
-  res.status(200);
-  res.json({
-    status: 'success',
-    data: {
-      tour: 'Updated tour here...',
-    },
-  });
+exports.updateTour = async (req, res) => {
+  try {
+    //findByIdAndUpdate
+    const updatedTour = await Tour.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+      runValidators: true,
+    });
+
+    //update still sends back 200 ok
+    res.status(200);
+    res.json({
+      status: 'success',
+      data: {
+        tour: updatedTour,
+      },
+    });
+  } catch (error) {
+    res.status(400).json({
+      status: 'fail',
+      message: error,
+    });
+  }
 };
 
-exports.deleteTour = (req, res) => {
-  //delete  sends back 204 no content
-  res.status(204);
-  res.json({
-    status: 'success',
-    data: null,
-  });
+exports.deleteTour = async (req, res) => {
+  try {
+    await Tour.findByIdAndDelete(req.params.id);
+    //delete  sends back 204 no content
+    //delete sends back no data to the client
+    res.status(204);
+    res.json({
+      status: 'success',
+      data: null,
+    });
+  } catch (error) {
+    res.status(400).json({
+      status: 'fail',
+      message: error,
+    });
+  }
 };

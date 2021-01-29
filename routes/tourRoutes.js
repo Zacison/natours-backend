@@ -6,8 +6,8 @@ const {
   getOneTour,
   updateTour,
   deleteTour,
-  checkBody,
 } = require('../controllers/tourController');
+
 const tourRouter = express.Router();
 
 //parameter middleware - mw that only runs when there is a certan param
@@ -19,7 +19,7 @@ const tourRouter = express.Router();
 //add it to the post handler stack
 
 //tours routes
-tourRouter.route('/').get(getAllTours).post(checkBody, createTour);
+tourRouter.route('/').get(getAllTours).post(createTour);
 tourRouter.route('/:id').get(getOneTour).patch(updateTour).delete(deleteTour);
 
 module.exports = tourRouter;
