@@ -2,44 +2,100 @@ const { deleteMany } = require('../models/tourModel');
 const Tour = require('../models/tourModel');
 //Route handlers, aka controllers
 
+exports.aliasTopTours = (req, res, next) => {
+  req.query.limit = '5';
+  req.query.sort = '-ratingsAverage, price';
+  req.query.fields = 'name,price,ratingsAverage,summary,difficulty';
+  next();
+};
+
 /*
 const tours = JSON.parse(
   fs.readFileSync(`${__dirname}/../dev-data/data/tours-simple.json`)
 );
 */
 
+class APIFeatures {
+  constructor(query, queryString) {
+    this.query = query;
+    this.queryString = queryString;
+  }
+
+  filter() {
+    // 1- Filtering
+    const queryObject = { ...this.queryString };
+    const excludedFields = ['page', 'sort', 'limit', 'fields'];
+    excludedFields.forEach((el) => delete queryObject[el]);
+
+    //2) Advanced filtering
+    //now we want to do greater than, less than, equals to, etc...
+    //in the query, it will be /tours?duration{[gte]=5
+    //the query we get back wont habve the $. thats just what mongoose does
+    //so we have to replace it with the $ sign
+    // { difficulty: 'easy', duration: { $gte: 5 } }
+
+    let queryStr = JSON.stringify(queryObject);
+    queryStr = queryStr.replace(/\b(gte|gt|lte|lt)\b/g, (match) => `$${match}`);
+    queryStr = JSON.parse(queryStr);
+    this.query = this.query.find(queryStr);
+    return this;
+  }
+
+  sort() {
+    if (this.queryString.sort) {
+      const sortBy = this.queryString.sort.split(',').join(' ');
+
+      this.query = this.query.sort(sortBy);
+    } else {
+      //if there is no sort, sort by createdAt, so the new creations appear first
+      this.query = this.query.sort('-createdAt');
+    }
+    return this;
+  }
+
+  limitFields() {
+    //FIELD LIMITING
+    ///tours?fields=name,duration,difficulty,price
+    if (this.queryString.fields) {
+      const fields = this.queryString.fields.split(',').join(' ');
+      this.query = this.query.select(fields);
+    } else {
+      this.query = this.query.select('-__v');
+    }
+    return this;
+  }
+
+  paginate() {
+    //PAGINATION
+    //uses page field, ex: ?page=2&limit=10
+    // 1-10 is page 1, 11-20 is page 2, etc...
+    //skip value is dynamic, so we have to calculate that
+    //default: make the string into a number
+    const page = this.queryString.page * 1 || 1;
+    const limit = this.queryString.limit * 1 || 100;
+    const skip = (page - 1) * limit;
+    this.query = this.query.skip(skip).limit(limit);
+
+    return this;
+  }
+}
+
 //first get request
 //get all tours
 exports.getAllTours = async (req, res) => {
   try {
-    //filtering out things like the page for pagination
-    //new object containing all teh key value pairs in the req.query object
-    // eslint-disable-next-line node/no-unsupported-features/es-syntax
-    const queryObject = { ...req.query };
-    const excludedFields = ['page', 'sort', 'limit', 'fields'];
-    excludedFields.forEach((el) => delete queryObject[el]);
-    /*gives us:
-    //{ duration: '5',
-  difficulty: 'easy',
-  page: '2',
-  sort: '1',
-  limit: '10' } { duration: '5', difficulty: 'easy' }
-  */
+    console.log(req.query);
 
-    //query is 127.0.0.1:3000/api/v1/tours?duration=5&difficulty=easy
+    //Build query
 
-    //from mongoDB, the find method returns all documents in teh collection
+    //Execute the query
+    //passing in the model we can query, and the qstring coming from express
+    //then we manipulate the query
+    const features = new APIFeatures(Tour.find(), req.query);
+    //can chain methods bc we return this at the end of each method
+    features.filter().sort().limitFields().paginate();
 
-    const allTours = await Tour.find(queryObject);
-    //new way, mongoose has specific filter methods we can use
-    //query prototype has a ton of methods on the query class, so we can chain
-    //when we use await, then the query executed and comes back with the result of the query
-    //.where('duration')
-    //.equals(5)
-    //.where('difficulty')
-    //.equals('easy');
-    //could use the normal filter object from mongo
-    // await Tour.find({ duration: 5, difficulty: 'easy'})
+    const allTours = await features.query;
 
     //another way is await Tour.find(req.query)
     res.status(200);
@@ -179,6 +235,99 @@ exports.deleteTour = async (req, res) => {
     res.json({
       status: 'success',
       data: null,
+    });
+  } catch (error) {
+    res.status(400).json({
+      status: 'fail',
+      message: error,
+    });
+  }
+};
+
+//aggregation pipeline, part of mongo
+exports.getTourStats = async (req, res) => {
+  try {
+    const stats = await Tour.aggregate([
+      //match stage
+      {
+        $match: { ratingsAverage: { $gte: 4.5 }, _id: { $ne: 'easy' } },
+      },
+      {
+        $group: {
+          _id: 'difficulty',
+          //_id: '$difficulty',
+          numTours: { $sum: 1 },
+          numRatings: { $sum: '$ratingsAverage' },
+          avgRating: { $avg: '$ratingsAverage' },
+          avgPrice: { $avg: '$price' },
+          minPrice: { $min: '$price' },
+          maxPrice: { $max: '$price' },
+        },
+      },
+      {
+        $sort: { avgPrice: 1 },
+      },
+    ]);
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        stats: stats,
+      },
+    });
+  } catch (error) {
+    res.status(400).json({
+      status: 'fail',
+      message: error,
+    });
+  }
+};
+
+exports.getMonthlyPlan = async (req, res) => {
+  try {
+    const year = req.params.year * 1;
+    const plan = await Tour.aggregate([
+      {
+        //unwinds all the startdates in the results,
+        //so theres 27 tours instead of 9, bc each tour has 3 start dates
+        $unwind: '$startDates',
+      },
+      {
+        $match: {
+          startDates: {
+            $gte: new Date(`${year}-01-01`),
+            $lte: new Date(`${year}-12-31`),
+          },
+        },
+      },
+      {
+        $group: {
+          _id: { $month: '$startDates' },
+          numTourStarts: { $sum: 1 },
+          tours: { $push: '$name' },
+        },
+      },
+      {
+        $addFields: { month: '$_id' },
+      },
+      {
+        $project: {
+          _id: 0,
+        },
+      },
+      {
+        $sort: { numTourStarts: -1 },
+      },
+      {
+        $limit: 12,
+      },
+    ]);
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        plan: plan,
+      },
     });
   } catch (error) {
     res.status(400).json({
