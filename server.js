@@ -16,6 +16,7 @@ mongoose
     useNewUrlParser: true,
     useCreateIndex: true,
     useFindAndModify: false,
+    useUnifiedTopology: true,
   })
   .then(() => console.log('connected to the mongoose db'));
 
@@ -34,6 +35,22 @@ console.log(process.env);
 //
 //start up a server
 const port = process.env.PORT || 3000;
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log('Listening to the express server');
+});
+
+//handling all unhandles promise rejections
+//importannt, since our error handling only works inside express app
+//this handles things outside of that app - safety net
+//listens to the unhandledRejection Events that occur in async code
+process.on('unhandledRejection', (err) => {
+  console.log(err.name, err.message);
+  console.log('Unhandled rejection, shutting down...');
+  //process.exit is used to exit the app
+  //0 stands for success, 1 for uncaught exception
+  //server.close closes server gracefully - finishes all req/res needed, then exits
+  //in a production level app there will be something that restarts the app
+  server.close(() => {
+    process.exit(1);
+  });
 });

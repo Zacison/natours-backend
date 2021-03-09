@@ -3,7 +3,8 @@
 const express = require('express');
 
 const morgan = require('morgan');
-
+const AppError = require('./utils/appError');
+const globalErrorHandler = require('./controllers/errorController');
 //get the routes
 const tourRouter = require('./routes/tourRoutes');
 const userRouter = require('./routes/userRoutes');
@@ -25,7 +26,7 @@ app.use(express.static(`${__dirname}/public`));
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
-
+/*
 //middleware gets the res and req objects, as well as the next arg
 //good to define global middleware before route handlers
 //remember, middleware gets called in order that its written in code
@@ -41,6 +42,7 @@ app.use((req, res, next) => {
   req.requestTime = new Date().toISOString();
   next();
 });
+*/
 
 /*
 //routing - server.method('path', callback  )
@@ -78,7 +80,31 @@ app.post('/', (req, res) => {
 //cant use the routers before we declare them
 //when a req comes in it will match with the path, and run the route
 //mount the routers on two different routes
+
+app.use((req, res, next) => {
+  //adding a property to a request
+  req.requestTime = new Date().toISOString();
+  //console.log(req.headers.authorization);
+  next();
+});
+
 app.use('/api/v1/tours', tourRouter);
 app.use('/api/v1/users', userRouter);
+
+//General error handle
+//If we reach this point, the res/req cycle hasnt yet finished
+//mw is added to our code in the order it is written
+//if the route matched the tour or user router, it wouldnt even hit this
+//this is the last part after every other route
+//if we had this at the beginning, we would only get this.
+//.all handles all get/post/methods, and the * gets all routes
+app.all('*', (req, res, next) => {
+  next(new AppError(`Cant find ${req.originalUrl} on this server`, 404));
+});
+
+//express has error handling out of the box
+//by ysing a 4 arg function, express knows that it is error handling
+
+app.use(globalErrorHandler);
 
 module.exports = app;

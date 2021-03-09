@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const slugify = require('slugify');
+
 //mongoose.Schema specifies a schema for the data, describing and doing basic balidation
 const tourSchema = new mongoose.Schema(
   {
@@ -12,6 +13,13 @@ const tourSchema = new mongoose.Schema(
       //the runValidators setting has to be set to true in the updateTour route handler for this to work, for example
       maxlength: [40, 'A tour name must have less than or equal to 40 chars'],
       minlength: [3, 'A name must have more than 3 characters'],
+      //this is how we use the validator alphabetic validation
+      //but this doesnt handle white space
+      /*validate: [
+        validator.isAlpha,
+        'Tour name must only contain alphabet chars',
+      ],
+      */
     },
     slug: String,
     duration: {
@@ -47,6 +55,8 @@ const tourSchema = new mongoose.Schema(
       required: true,
     },
     priceDiscount: Number,
+    //custom validator for if the discout is greater than the price
+
     summary: {
       type: String,
       //trim removes leading/trailing whitespace
